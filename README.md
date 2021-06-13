@@ -18,25 +18,25 @@ global network를 두고 각 thread마다 policy를 둔다. 각 thread 마다 �
 
 N=3일 시 t=0에서 3-step TD를 적용하고 t=1에서 2-step TD를 적용한다. 
 
-$$V_0 \to V_1 \to V_2 \to V_3$$
+>$$V_0 \to V_1 \to V_2 \to V_3$$
 
 when t=0
 
-$$A_0 \triangleq R_0 + \gamma R_1 + \gamma^2 R_2 + \gamma^3 V(3) - V(0)$$
+>$$A_0 \triangleq R_0 + \gamma R_1 + \gamma^2 R_2 + \gamma^3 V(3) - V(0)$$
 
 ## Entropy
 
 disbribution이 커질 수록 불확실성이 높아진다.
 
-$$H(p(x) \triangleq \int -p(x) \text{ln}p(x) \, dx$$
+>$$H(p(x) \triangleq \int -p(x) \text{ln}p(x) \, dx$$
 	
-$$ = \int^\infty_{-\infty} -p(x) \text{ln} \frac{1}{\sqrt{2\pi \delta^2}} \text{e}^{-\frac{(x-\mu)^2}{2\delta^2}} \, dx$$
+>$$ = \int^\infty_{-\infty} -p(x) \text{ln} \frac{1}{\sqrt{2\pi \delta^2}} \text{e}^{-\frac{(x-\mu)^2}{2\delta^2}} \, dx$$
 
-$$=\int^\infty_{-\infty} p(x) \text{ln} \sqrt{2\pi \delta^2} \, dx + \int^\infty_{-\infty} p(x) \frac{(x-\mu)^2}{2\delta^2}\, dx$$
+>$$=\int^\infty_{-\infty} p(x) \text{ln} \sqrt{2\pi \delta^2} \, dx + \int^\infty_{-\infty} p(x) \frac{(x-\mu)^2}{2\delta^2}\, dx$$
 
-$$=\frac{1}{2} (1 + \text{ln} 2\pi \delta^2)$$
+>$$=\frac{1}{2} (1 + \text{ln} 2\pi \delta^2)$$
 
-$$E[(x-\mu)^2]=\delta^2$$
+>$$E[(x-\mu)^2]=\delta^2$$
 
 entropy는 분산에 비례한다.
 
@@ -49,7 +49,7 @@ Entropy가 높아진다는 뜻은 exploration 가능성이 높다는 뜻
 
 ## Algorithm
 
-![algorithm][Algorithm]
+![algorithm][Algorithm]  
 _A3C algorithm_
 
 ## Code
