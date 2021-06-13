@@ -34,9 +34,7 @@ disbribution이 커질 수록 불확실성이 높아진다.
 
 >$$=\int^\infty_{-\infty} p(x) \text{ln} \sqrt{2\pi \delta^2} \, dx + \int^\infty_{-\infty} p(x) \frac{(x-\mu)^2}{2\delta^2}\, dx$$
 
->$$
-=\frac{1}{2} (1 + \text{ln} 2\pi \delta^2)
-$$
+$$ =\frac{1}{2} (1 + \text{ln} 2\pi \delta^2) $$
 
 >$$E[(x-\mu)^2]=\delta^2$$
 
