@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import torch
 import torch.multiprocessing as mp
+import torch.nn.functional as F
 import torch.optim as optim
 from collections import deque
 from torch.distributions import Normal
@@ -15,16 +16,14 @@ def get_action(actor,state, evaluate=False):
 		mean, std = actor(state)
 		dist = Normal(mean, std)
 		action = dist.sample()
-	log_prob = dist.log_prob(action).sum(dim=-1)
 	action = action.clamp(-2.0,2.0)
 	
-	return action.detach().cpu().numpy(), log_prob.item()
+	return action.detach().cpu().numpy()
 
 
 def run(center_actor, center_critic, i, seed, device, env_name, actor_lr, 
 										 critic_lr, buffer_size, episodes, 
 										 max_step, gamma, log_interval):
-	print("Run")
 	env = gym.make(env_name)
 	state_dim = env.observation_space.shape[0]
 	action_dim = env.action_space.shape[0]
@@ -63,52 +62,51 @@ def run(center_actor, center_critic, i, seed, device, env_name, actor_lr,
 		for s in range(max_step):
 				
 			#Run
-			action, log_prob = get_action(actor,torch.Tensor(state).to(device))
+			action = get_action(actor,torch.Tensor(state).to(device))
 							
 			next_state, reward, done, _ = env.step(action)
 			
-			RB.save_sample(state, action, (reward+8.)/8., done, next_state, log_prob)
+			RB.save_sample(state, action, (reward+8.)/8., done, next_state)
 			
 			
 			if n_step == buffer_size or done:
 				#Train 
-				states, actions, rewards, dones, next_states, log_probs = RB.get_sample()
+				states, actions, rewards, dones, next_states = RB.get_sample()
 
 				states = torch.FloatTensor(list(states)).to(device) # shape: [memory size, state_dim]
 				actions = torch.FloatTensor(list(actions)).view(-1,action_dim).to(device) # shape: [memory size, action_dim]
 				rewards = torch.FloatTensor(list(rewards)).view(-1,1).to(device) # shape: [memory size]
 				dones = torch.FloatTensor(list(dones)).view(-1,1).to(device) # shape: [memory size]
 				next_states = torch.FloatTensor(list(next_states)).to(device) # shape: [memory size, state_dim]
-				log_probs = torch.FloatTensor(list(log_probs)).view(-1,1).to(device) # shape: [memory size]
 
-#				mean, std = actor(states)
-#				dist = Normal(mean, std)
+				mean, std = actor(states)
+				dist = Normal(mean, std)
 #				action = dist.sample()
-#				log_probs = dist.log_prob(action).sum(dim=-1)
-#				log_probs = log_probs.view(-1,1).to(device)
+				log_probs = dist.log_prob(actions).sum(dim=-1)
+				log_probs = log_probs.view(-1,1).to(device)
 			   
 				V = critic(states)
-				Q = rewards + gamma*critic(next_states).detach()
+				Q = rewards + gamma*critic(next_states).detach()*(1-dones)
 				Advantage = Q - V
-				
-					   
-				#Actor update
-				actor_optim.zero_grad()
-				actor_loss = 0
-				actor_loss = -(Advantage*log_probs).mean()
-				actor_loss.backward()
-				for center_actor_param, actor_param in zip(center_actor.parameters(), actor.parameters()):
-					center_actor_param._grad = actor_param.grad
-				actor_optim.step()
-
+	
 				#Critic update
 				critic_optim.zero_grad()
-				critic_loss = Advantage.pow(2.).mean()
+#				critic_loss = Advantage.pow(2.).mean()
+				critic_loss = F.mse_loss(V, Q.detach())
 				critic_loss.backward()
 				for center_critic_param, critic_param in zip(center_critic.parameters(), critic.parameters()):
 					center_critic_param._grad = critic_param.grad
 				critic_optim.step()
 				
+					   
+				#Actor update
+				actor_optim.zero_grad()
+				actor_loss = -(Advantage.detach()*log_probs).mean()
+				actor_loss.backward()
+				for center_actor_param, actor_param in zip(center_actor.parameters(), actor.parameters()):
+					center_actor_param._grad = actor_param.grad
+				actor_optim.step()
+			
 				actor.load_state_dict(center_actor.state_dict())
 				critic.load_state_dict(center_critic.state_dict())
 				
@@ -124,12 +122,12 @@ def run(center_actor, center_critic, i, seed, device, env_name, actor_lr,
 		total_return.append(total_reward)
 		avg_return = np.mean(total_return)
 		
-		if (episode+1)%log_interval ==0:
-			print('---------------------------------------')
-			print("Process-{}".format(i))
-			print('\tEpisodes:', episode + 1)
-			print('\tAverageReturn:', round(avg_return, 2))
-			print('---------------------------------------')
+#		if (episode+1)%log_interval ==0:
+#			print('---------------------------------------')
+#			print("Process-{}".format(i))
+#			print('\tEpisodes:', episode + 1)
+#			print('\tAverageReturn:', round(avg_return, 2))
+#			print('---------------------------------------')
 		
 	env.close()
 	print("Process {} End".format(i))
@@ -137,7 +135,60 @@ def run(center_actor, center_critic, i, seed, device, env_name, actor_lr,
 # def main(args):
 	
 	
-  
+def test(center_actor,i, seed, device, env_name, episodes, 
+										 max_step, log_interval):
+	env = gym.make(env_name)
+	state_dim = env.observation_space.shape[0]
+	action_dim = env.action_space.shape[0]
+	action_limit = env.action_space.high[0]  
+	
+
+	if device == 'cuda':
+		device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+		torch.cuda.manual_seed_all(seed+i)
+	else:
+		device = torch.device('cpu')   
+		
+	# Set a random seed
+	env.seed(seed+i)
+	np.random.seed(seed+i)
+	torch.manual_seed(seed+i)
+	
+	total_return = deque(maxlen=100)
+	
+	for episode in range(episodes):
+		total_reward = 0
+		n_step = 0
+		
+		state = env.reset()
+		
+		for s in range(max_step):
+				
+			#Run
+			action = get_action(center_actor,torch.Tensor(state).to(device))
+							
+			next_state, reward, done, _ = env.step(action)
+			
+				
+			state = next_state
+			total_reward += reward
+				
+			if done:
+				break
+			
+		total_return.append(total_reward)
+		avg_return = np.mean(total_return)
+		
+		if (episode+1)%log_interval ==0:
+			print('---------------------------------------')
+			print("Test Process-{}".format(i))
+			print('\tEpisodes:', episode + 1)
+			print('\tAverageReturn:', round(avg_return, 2))
+			print('---------------------------------------')
+		
+	env.close()
+	print("Process {} End".format(i))
+		
 		  
 if __name__ == "__main__":
 	# parser = argparse.ArgumentParser(description='A3C')
@@ -180,20 +231,20 @@ if __name__ == "__main__":
 	# num_process = args.num_process
 	
 	seed = 0
-	device = 'cpu'
+	device_type = 'cpu'
 	env_name = "Pendulum-v0"
 	actor_lr = 1e-4
 	critic_lr = 1e-3
-	buffer_size= 5
-	episodes = 10000
+	buffer_size= 200
+	episodes = 100000
 	max_step = 200
 	gamma = 0.99
 	log_interval = 100
 	num_process = 4
 	
-	if device == 'cuda':
+	if device_type == 'cuda':
 		assert torch.cuda.is_available()
-		mp.set_start_method('spawn',True)
+		mp.set_start_method('spawn')
 		device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 	else:
 		device = torch.device('cpu')   
@@ -213,12 +264,15 @@ if __name__ == "__main__":
 	processes = []	  
 	
 	print("Mp: {}".format(mp.get_start_method()))
-	for i in range(num_process):
+	for i in range(num_process+1):
 		print("Process-{} start".format(i))
-		p = mp.Process(target=run, args=(center_actor, center_critic, i, 
-										 seed, device, env_name, actor_lr, 
-										 critic_lr, buffer_size, episodes, 
-										 max_step, gamma, log_interval))
+		if i==0:
+			p = mp.Process(target=test, args=(center_actor, i, seed, device, env_name, episodes, max_step, log_interval))
+		else:
+			p = mp.Process(target=run, args=(center_actor, center_critic, i, 
+											 seed, device_type, env_name, actor_lr, 
+											 critic_lr, buffer_size, episodes, 
+											 max_step, gamma, log_interval))
 		p.start()
 		processes.append(p)
 		

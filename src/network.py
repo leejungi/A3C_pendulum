@@ -12,13 +12,13 @@ class Actor(nn.Module):
     def __init__(self,n_state, action_dim, action_limit):
         super(Actor, self).__init__()
         self.layers = nn.Sequential(
-                nn.Linear(n_state, 64),
+                nn.Linear(n_state, 128),
                 nn.ReLU(),
-                nn.Linear(64, 256),
+                nn.Linear(128, 128),
                 nn.ReLU(),
                 )
-        self.mean= nn.Linear(256, action_dim)
-        self.log_std= nn.Linear(256, action_dim)
+        self.mean= nn.Linear(128, action_dim)
+        self.log_std= nn.Linear(128, action_dim)
         self.action_limit = action_limit
         self.apply(weights_init_)
 
@@ -43,11 +43,11 @@ class Critic(nn.Module):
     def __init__(self,n_state):
         super(Critic, self).__init__()
         self.layers = nn.Sequential(
-                nn.Linear(n_state , 64),
+                nn.Linear(n_state , 128),
                 nn.ReLU(),
-                nn.Linear(64, 256),
+                nn.Linear(128, 128),
                 nn.ReLU(),
-                nn.Linear(256, 1),
+                nn.Linear(128, 1),
                 
                 )
         self.apply(weights_init_)

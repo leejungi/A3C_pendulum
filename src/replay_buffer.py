@@ -9,19 +9,17 @@ class Replay_buffer:
         self.rewards = deque(maxlen=size)
         self.dones = deque(maxlen=size)
         self.next_states = deque(maxlen=size)
-        self.probs = deque(maxlen=size)
 
-    def save_sample(self, state, action, reward, done, next_state, action_prob):
+    def save_sample(self, state, action, reward, done, next_state):
         
         self.states.append(state)
         self.actions.append(action)
         self.rewards.append(reward)
         self.dones.append(done)
         self.next_states.append(next_state)
-        self.probs.append(action_prob)
     
     def get_sample(self):
-        return self.states, self.actions, self.rewards, self.dones, self.next_states, self.probs
+        return self.states, self.actions, self.rewards, self.dones, self.next_states
     
     def clear(self):
         self.states.clear()
@@ -29,7 +27,6 @@ class Replay_buffer:
         self.rewards.clear()
         self.dones.clear()
         self.next_states.clear()
-        self.probs.clear()
     
     def __len__(self):
         return len(self.buffer)
